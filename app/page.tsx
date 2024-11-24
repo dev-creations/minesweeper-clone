@@ -1,101 +1,185 @@
-import Image from "next/image";
+"use client";
+
+import { MouseEvent as ReactMouseEvent, useState } from "react";
+
+function createRandomGameFields(cols: number, rows: number) {
+  const items = cols * rows;
+
+  return [...Array(items)].map((_) => (Math.random() > 0.7 ? "💣" : ""));
+}
+
+function bombsNearTile({
+  fields,
+  tileIndex,
+  columns,
+  rows,
+}: {
+  fields: string[];
+  tileIndex: number;
+  columns: number;
+  rows: number;
+}) {
+  if (fields[tileIndex] === "💣") {
+    return "💣";
+  }
+
+  const validFields = [];
+
+  // Right border should not wrap
+  if ((tileIndex + 1) % columns !== 0) {
+    validFields.push(
+      ...[tileIndex - columns + 1, tileIndex + 1, tileIndex + columns + 1]
+    );
+  }
+
+  // Left border should not wrap
+  if (tileIndex % columns !== 0) {
+    validFields.push(
+      ...[tileIndex - columns - 1, tileIndex - 1, tileIndex + columns - 1]
+    );
+  }
+
+  // Top should be within the game field
+  if (tileIndex - columns >= 0) {
+    validFields.push(tileIndex - columns);
+  }
+
+  // Bottom should be within game field
+  if (tileIndex + columns < columns * rows) {
+    validFields.push(tileIndex + columns);
+  }
+
+  return validFields
+    .map((i) => fields[i])
+    .filter((f) => f === "💣")
+    .length.toString();
+}
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+  const columns = 4;
+  const rows = 4;
+  const [fields, setFields] = useState<string[]>([]);
+  const [currentFields, setCurrentFields] = useState<string[]>([]);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+  const handleNewGame = () => {
+    setFields([...createRandomGameFields(columns, rows)]);
+    setCurrentFields([...Array(columns * rows)].map(() => ""));
+  };
+
+  const revealAllFields = () => {
+    setCurrentFields((tmpCurrentFields) =>
+      tmpCurrentFields.map((f, i) => {
+        if (f === "🚩") {
+          return f;
+        }
+
+        return bombsNearTile({ tileIndex: i, columns, rows, fields });
+      })
+    );
+  };
+
+  const handleTileClick = (tile: number) => () => {
+    if (currentFields[tile]) {
+      return;
+    }
+
+    setCurrentFields((tmpCurrentFields) => {
+      tmpCurrentFields[tile] = bombsNearTile({
+        tileIndex: tile,
+        columns,
+        rows,
+        fields,
+      });
+
+      return [...tmpCurrentFields];
+    });
+
+    if (fields[tile] === "💣") {
+      // HandleGameOver
+      revealAllFields();
+    }
+  };
+
+  const handlePlaceFlag =
+    (tile: number) => (e: ReactMouseEvent<HTMLButtonElement, MouseEvent>) => {
+      e.preventDefault();
+
+      if (currentFields[tile] !== "🚩" && currentFields[tile]) {
+        return;
+      }
+
+      currentFields[tile] = currentFields[tile] === "🚩" ? "" : "🚩";
+
+      setCurrentFields([...currentFields]);
+    };
+
+  const gameFinished =
+    currentFields.filter(Boolean).length === currentFields.length;
+  const gameLost = currentFields.includes("💣");
+  const gameWon =
+    !gameLost &&
+    fields.filter((f) => f === "💣").length ===
+      currentFields.filter((f) => f === "🚩").length;
+
+  return (
+    <main className="bg-gray-200">
+      <section className="max-w-screen-xl mx-auto px-4 py-8 ">
+        <h2>Minesweeper clone</h2>
+
+        <div className="my-4">
+          {fields.length > 0 ? (
+            <>
+              <p>Left click: Reveal, Right click: flag</p>
+              {gameFinished && (
+                <p>
+                  {gameLost && "Game finished: You've lost"}
+                  {gameWon && "Game finished: You've won"}
+                </p>
+              )}
+              <div
+                className={`grid grid-rows-[repeat(var(--rows),var(--tile-size))] grid-cols-[repeat(var(--cols),var(--tile-size))]`}
+                style={{
+                  ["--rows" as string]: rows,
+                  ["--cols" as string]: columns,
+                  ["--tile-size" as string]: "3rem",
+                }}
+                inert={gameFinished}
+              >
+                {[...Array(columns * rows)].map((_, i) => (
+                  <button
+                    type="button"
+                    className="bg-slate-400 border border-white hover:bg-slate-300 select-none"
+                    onClick={handleTileClick(i)}
+                    onContextMenu={handlePlaceFlag(i)}
+                    key={i}
+                  >
+                    {currentFields[i]}
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div>click 'New Game' to start</div>
+          )}
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+
+        <div className="flex gap-4">
+          <button
+            type="button"
+            onClick={handleNewGame}
+            className="rounded-md bg-green-600 px-2.5 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-green-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-green-600"
+          >
+            New Game
+          </button>
+          <button
+            type="button"
+            disabled={gameFinished}
+            onClick={revealAllFields}
+          >
+            Reveal All
+          </button>
+        </div>
+      </section>
+    </main>
   );
 }
